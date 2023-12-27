@@ -10,137 +10,24 @@
 
 typedef struct {
     char name[256];
-    mode_t permissions;
+    mode_t perms;
     size_t size;
 } FileInfo;
 
-void createArchive(int argc, char *argv[]);
-size_t getFileSize(const char *filename);
 
-
-void extractArchive(int argc, char *argv[]) {
-    if (argc != 4) {
-        printf("Usage: tarsau -a archive.sau directory\n");
+//GET FILE SIZE
+size_t getFileSize(const char *filename) {
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        printf("The file could not be opened.\n");
         exit(1);
     }
 
-    const char *archiveFile = argv[2]; // a.sau
-    const char *outputDirectory = argv[3]; // s1
-
-    // Kontrol edilecek dizinin var olup olmadığını kontrol et
-    struct stat st;
-    if (stat(outputDirectory, &st) != 0) {
-        // Dizin yoksa, oluştur
-        if (mkdir(outputDirectory, 0777) != 0) {
-            perror("Error creating output directory");
-            exit(1);
-        }
-    } else if (!S_ISDIR(st.st_mode)) {
-        // Varolan bir dosya varsa hata ver
-        fprintf(stderr, "Error: %s is not a directory\n", outputDirectory);
-        exit(1);
-    }
-
-    // Dosyayı aç
-    FILE *file = fopen(archiveFile, "r");
-    if (file == NULL) {
-        perror("Error opening archive file");
-        exit(1);
-    }
-
-    // Dosyanın boyutunu al
     fseek(file, 0, SEEK_END);
-    long fileSize = ftell(file);
-    rewind(file);
-
-    // Dosya içeriğini bir tampona oku
-    char *buffer = (char *)malloc(fileSize * sizeof(char));
-    if (buffer == NULL) {
-        perror("Error allocating memory for file content");
-        fclose(file);
-        exit(1);
-    }
-
-    fread(buffer, sizeof(char), fileSize, file);
-
-    // Dosya isimlerini ayrıştır ve consola yazdır
-    char *start = buffer;
-
-    // | işaretinin son konumu
-    char *lastSeperatorLocation = strrchr(start, '|');
-    char *startSeperateText = lastSeperatorLocation + 1;
-
-    while (1) {
-        char *separator = strchr(start, '|');
-        if (separator == NULL) {
-            break;
-        }
-
-        char *filenameStart = separator + 1;
-        char *filenameEnd = strchr(filenameStart, ',');
-        if (filenameEnd == NULL) {
-            break;
-        }
-
-        *filenameEnd = '\0';
-
-        // Dosya boyutunu al
-        int boyut;
-        if (sscanf(filenameEnd + 1, "%*d,%d", &boyut) == 1) {
-            // Dosya Adi: %s, Boyut: %d
-            // printf("Dosya Adi: %s, Boyut: %d\n", filenameStart, boyut);
-
-            // Dosyanın içeriğini dosyaya yaz
-            char filePath[256];
-            snprintf(filePath, sizeof(filePath), "%s/%s", outputDirectory, filenameStart);
-
-            FILE *outputFile = fopen(filePath, "w");
-            if (outputFile == NULL) {
-                perror("Error creating output file");
-                fclose(file);
-                free(buffer);
-                exit(1);
-            }
-
-            // Dosyanın içeriğini yaz
-            fprintf(outputFile, "%.*s", boyut, startSeperateText);
-
-            // Konsol ekranına da yaz
-            //printf("Dosya Icerigi:\n%.*s\n", boyut, startSeperateText);
-
-            // Dosyayı kapat
-            fclose(outputFile);
-
-            // İlerleme
-            startSeperateText += boyut;
-        }
-
-        start = filenameEnd + 1;
-    }
-
-    // Bellek ve dosya kaynaklarını temizle
-    free(buffer);
+    size_t size = ftell(file);
     fclose(file);
-}
 
-
-
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        printf("Usage: tarsau -b files... -o arsiv.sau OR tarsau -a arsiv.sau directory\n");
-        return 1;
-    }
-
-    if (strcmp(argv[1], "-b") == 0) {
-        createArchive(argc, argv);
-    } else if (strcmp(argv[1], "-a") == 0) {
-        extractArchive(argc, argv);
-    } else {
-        printf("Invalid transaction. Use -b to create an archive or -a to extract it.");
-        return 1;
-    }
-
-    return 0;
+    return size;
 }
 
 // CREATE ARCHIVE
@@ -179,13 +66,12 @@ void createArchive(int argc, char *argv[]) {
         strcpy(files[fileCount].name, filename);
         files[fileCount].size = fileSize;
 
-        // Orijinal dosyanın izinlerini kullan
         struct stat st;
         if (stat(filename, &st) != 0) {
             perror("stat");
             exit(1);
         }
-        files[fileCount].permissions = st.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+        files[fileCount].perms = st.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
 
         totalSize += fileSize;
         fileCount++;
@@ -199,7 +85,7 @@ void createArchive(int argc, char *argv[]) {
 
     fprintf(archive, "%010zu|", totalSize);
     for (int i = 0; i < fileCount; ++i) {
-        fprintf(archive, "%s,%o,%zu|", files[i].name, files[i].permissions, files[i].size);
+        fprintf(archive, "%s,%o,%zu|", files[i].name, files[i].perms, files[i].size);
     }
 
     for (int i = 0; i < fileCount; ++i) {
@@ -224,17 +110,121 @@ void createArchive(int argc, char *argv[]) {
 }
 
 
-//GET FILE SIZE
-size_t getFileSize(const char *filename) {
-    FILE *file = fopen(filename, "rb");
-    if (!file) {
-        printf("The file could not be opened during the size programming process.\n");
+void extractArchive(int argc, char *argv[]) {
+    if (argc != 4) {
+        printf("Usage: tarsau -a archive.sau directory\n");
         exit(1);
     }
 
+    const char *archiveFile = argv[2]; // a.sau
+    const char *outputDirectory = argv[3]; // d1
+
+    // Check the exist folder
+    struct stat st;
+    if (stat(outputDirectory, &st) != 0) {
+        // Dizin yoksa, oluştur
+        if (mkdir(outputDirectory, 0777) != 0) {
+            perror("Error creating output directory");
+            exit(1);
+        }
+    } else if (!S_ISDIR(st.st_mode)) {
+        // Give an error if the file already exist
+        fprintf(stderr, "Error: %s is not a directory\n", outputDirectory);
+        exit(1);
+    }
+
+    // Open the folder
+    FILE *file = fopen(archiveFile, "r");
+    if (file == NULL) {
+        perror("Error opening archive file");
+        exit(1);
+    }
+
+    // Get the folder's size
     fseek(file, 0, SEEK_END);
-    size_t size = ftell(file);
+    long fileSize = ftell(file);
+    rewind(file);
+
+    // Read the file content
+    char *buffer = (char *)malloc(fileSize * sizeof(char));
+    if (buffer == NULL) {
+        perror("Error allocating memory for file content");
+        fclose(file);
+        exit(1);
+    }
+
+    fread(buffer, sizeof(char), fileSize, file);
+
+    char *start = buffer;
+
+    // The last location of |
+    char *lastSeperatorLocation = strrchr(start, '|');
+    char *startSeperateText = lastSeperatorLocation + 1;
+
+    while (1) {
+        char *separator = strchr(start, '|');
+        if (separator == NULL) {
+            break;
+        }
+
+        char *filenameStart = separator + 1;
+        char *filenameEnd = strchr(filenameStart, ',');
+        if (filenameEnd == NULL) {
+            break;
+        }
+
+        *filenameEnd = '\0';
+
+        int size_f;
+        if (sscanf(filenameEnd + 1, "%*d,%d", &size_f) == 1) {
+            // Dosya Adi: %s, size_f: %d
+            // printf("Dosya Adi: %s, size_f: %d\n", filenameStart, size_f);
+
+            // Write the file content
+            char filePath[256];
+            snprintf(filePath, sizeof(filePath), "%s/%s", outputDirectory, filenameStart);
+
+            FILE *outputFile = fopen(filePath, "w");
+            if (outputFile == NULL) {
+                perror("Error creating output file");
+                fclose(file);
+                free(buffer);
+                exit(1);
+            }
+
+            fprintf(outputFile, "%.*s", size_f, startSeperateText);
+
+            //printf("Dosya Icerigi:\n%.*s\n", size_f, startSeperateText);
+
+            // Close the folder
+            fclose(outputFile);
+            startSeperateText += size_f;
+        }
+
+        start = filenameEnd + 1;
+    }
+
+    free(buffer);
     fclose(file);
 
-    return size;
+    printf("The files have been extracted successfully.\n");
 }
+
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        printf("Usage: tarsau -b files... -o arsiv.sau OR tarsau -a arsiv.sau directory\n");
+        return 1;
+    }
+
+    if (strcmp(argv[1], "-b") == 0) {
+        createArchive(argc, argv);
+    } else if (strcmp(argv[1], "-a") == 0) {
+        extractArchive(argc, argv);
+    } else {
+        printf("Invalid transaction.");
+        return 1;
+    }
+    return 0;
+}
+

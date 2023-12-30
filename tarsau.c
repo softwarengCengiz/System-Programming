@@ -111,6 +111,7 @@ void createArchive(int argc, char *argv[]) {
 
 
 void extractArchive(int argc, char *argv[]) {
+
     if (argc != 4) {
         printf("Usage: tarsau -a archive.sau directory\n");
         exit(1);
@@ -174,13 +175,8 @@ void extractArchive(int argc, char *argv[]) {
         }
 
         *filenameEnd = '\0';
-
         int size_f;
         if (sscanf(filenameEnd + 1, "%*d,%d", &size_f) == 1) {
-            // Dosya Adi: %s, size_f: %d
-            // printf("Dosya Adi: %s, size_f: %d\n", filenameStart, size_f);
-
-            // Write the file content
             char filePath[256];
             snprintf(filePath, sizeof(filePath), "%s/%s", outputDirectory, filenameStart);
 
@@ -193,10 +189,6 @@ void extractArchive(int argc, char *argv[]) {
             }
 
             fprintf(outputFile, "%.*s", size_f, startSeperateText);
-
-            //printf("Dosya Icerigi:\n%.*s\n", size_f, startSeperateText);
-
-            // Close the folder
             fclose(outputFile);
             startSeperateText += size_f;
         }
